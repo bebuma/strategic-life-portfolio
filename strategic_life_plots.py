@@ -1,8 +1,9 @@
 import os
+import re
 import matplotlib.pyplot as plt
 from datetime import datetime
 import pandas as pd
-# from adjustText import adjust_text
+from adjustText import adjust_text
 
 # Define output folder
 absolute_path = os.path.abspath(__file__)
@@ -15,7 +16,6 @@ def print_welcome_message():
     print("\nWelcome to Strategic Life Portfolio!")
     print(f"\nToday is {date}")
 
-
 def get_user_name():
     """Get the user's name or return a default message if input is invalid."""
     try:
@@ -23,7 +23,6 @@ def get_user_name():
     except ValueError:
         name = "Anonymous"
     return name
-
 
 def define_slas_and_colors():
     """Define strategic life areas (SLAs) and their colors."""
@@ -35,8 +34,6 @@ def define_slas_and_colors():
             "Interests & entertainment": "#c080c0",
             "Personal care": "#bfbfbf",
         }
-
-
 
 def define_metrics_info():
     """Define metrics and their corresponding SLAs."""
@@ -59,23 +56,29 @@ def define_metrics_info():
         "Activities of daily living": "Personal care",
     }
 
-
 def convert_to_minutes(time_str):
-    """Convert a time string (e.g., '2h30m') to total minutes."""
+    """Convert a time string (e.g., '2h30m', '1', '30m') to total minutes."""
     total_minutes = 0
-    time_str = time_str.lower()
+    time_str = time_str.lower().strip()
 
-    parts = time_str.split("h")
-    for part in parts:
-        if "m" in part:
-            minutes_part = part.replace("m", "").strip()
-            total_minutes += int(minutes_part)
-        elif part.strip().isdigit():
-            hours_part = part.strip()
-            total_minutes += int(hours_part) * 60
+    # Regular expression to match hours and minutes
+    pattern = re.compile(r'(?:(\d+)h)?(?:(\d+)m)?')
+    match = pattern.fullmatch(time_str)
+
+    if match:
+        hours = match.group(1)
+        minutes = match.group(2)
+
+        if hours:
+            total_minutes += int(hours) * 60
+        if minutes:
+            total_minutes += int(minutes)
+    else:
+        # If the string is just a number, treat it as hours
+        if time_str.isdigit():
+            total_minutes += int(time_str) * 60
 
     return total_minutes
-
 
 def input_metrics(metrics_info):
     """Input metrics from the user."""
@@ -93,7 +96,7 @@ def input_metrics(metrics_info):
             f"Enter your satisfaction with {metric} (0-10): ", 0, 10
         )
         time = convert_to_minutes(
-            input(f"Enter the time invested in {metric} (e.g. 2h or 30m or 3h40m): ")
+            input(f"Enter the time invested (hour) in {metric} (e.g. 1 or 30m or 1h40m): ")
             .strip()
             .lower()
         )
@@ -108,7 +111,6 @@ def input_metrics(metrics_info):
         )
     return entries
 
-
 def get_valid_float_input(prompt, min_value, max_value):
     """Get a valid float input from the user within a specified range."""
     while True:
@@ -120,7 +122,6 @@ def get_valid_float_input(prompt, min_value, max_value):
                 print(f"Please enter a value between {min_value} and {max_value}.")
         except ValueError:
             print("Invalid input. Please enter a numerical value.")
-
 
 def adjust_text_labels(ax, data):
     """Adjust text labels to avoid overlapping."""
@@ -143,14 +144,15 @@ def adjust_text_labels(ax, data):
 
 def plot_metrics(data, sla_colors, metrics_info, name, output_folder="."):
     """Plot the metrics in a 2x2 matrix."""
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(8, 8))  # Adjusted the figure size to be twice as large
 
     # Sort data by 'Time' in ascending order
     data = data.sort_values(by='Time', ascending=False)
 
+    texts = []
     for i, row in data.iterrows():
         color = sla_colors[metrics_info[row["Metric"]]]
-        size = (row["Time"] / (7 * 24 * 60)) * 10000  # Convert time to percentage of the week and scale for visibility
+        size = (row["Time"] / (7 * 24 * 60)) * 50000  # Convert time to percentage of the week and scale for visibility
         ax.scatter(
             row["Satisfaction"],
             row["Importance"],
@@ -166,9 +168,10 @@ def plot_metrics(data, sla_colors, metrics_info, name, output_folder="."):
         ax.plot([row["Satisfaction"], text_x],
                 [row["Importance"], text_y],
                 color='gray', linestyle='--', linewidth=0.5)
+        texts.append(ax.text(text_x, text_y, row["Metric"], fontsize=9))
 
-    # Collect all text labels for adjust_text
-    texts = adjust_text_labels(ax, data)
+    # Adjust text labels to avoid overlap
+    adjust_text(texts, ax=ax) #, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
 
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
@@ -179,15 +182,13 @@ def plot_metrics(data, sla_colors, metrics_info, name, output_folder="."):
     plt.axvline(x=5, color="gray", linestyle="--")
     plt.axhline(y=5, color="gray", linestyle="--")
     
-    # # Avoid overlapping of text labels
-    # adjust_text(texts)
-    
     plt.show()
     fig.savefig(os.path.join(output_folder, name))
 
 
 def main():
     print_welcome_message()
+    ##########
     name = "Anonymous"
     entries = [
                     {"Metric": "Significant other", "Importance": 8.0, "Satisfaction": 3.0, "Time": 840.0},
@@ -207,6 +208,7 @@ def main():
                     {"Metric": "Physiological needs", "Importance": 7.0, "Satisfaction": 2.0, "Time": 420.0},
                     {"Metric": "Activities of daily living", "Importance": 8.0, "Satisfaction": 7.0, "Time": 420.0},
                 ]
+    ##########
     try:
         name
     except NameError:
@@ -220,12 +222,11 @@ def main():
         entries
     except NameError:
         entries = input_metrics(metrics_info)
-    for entry in entries:
-        data = data.append(entry, ignore_index=True)
+
+    data = pd.DataFrame(entries)
 
     plot_metrics(data, sla_colors, metrics_info, name, output_folder)
     print("Thank you! :)")
-
 
 if __name__ == "__main__":
     main()
